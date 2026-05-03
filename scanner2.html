@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Biothon Fest 2025 — Entry Scanner</title>
+
+<!-- QR Code Generator -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<!-- QR Code Reader -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+
+<style>
+:root {
+  --maroon: #7a1a1a;
+  --maroon-light: #a52020;
+  --maroon-dark: #4e0f0f;
+  --green: #15803d;
+  --green-bg: #dcfce7;
+  --red: #b91c1c;
+  --red-bg: #fee2e2;
+  --amber: #b45309;
+  --amber-bg: #fef3c7;
+  --bg: #f7f4f0;
+  --card: #ffffff;
+  --text: #1a1a1a;
+  --muted: #888;
+  --border: #e5e0da;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+body {
+  background: var(--bg);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  color: var(--text);
+  min-height: 100vh;
+}
+
+/* ── TOP BAR ── */
+.topbar {
+  background: var(--maroon);
+  color: #fff;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+}
+.topbar-title { font-size: 15px; font-weight: 700; letter-spacing: 0.02em; }
+.topbar-sub { font-size: 10px; color: rgba(255,255,255,0.55); letter-spacing: 0.1em; text-transform: uppercase; margin-top: 1px; }
+.status-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 0 3px rgba(74,222,128,0.25);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%,100% { box-shadow: 0 0 0 3px rgba(74,222,128,0.25); }
+  50%      { box-shadow: 0 0 0 6px rgba(74,222,128,0.1); }
+}
+
+/* ── TABS ── */
+.tabs {
+  display: flex;
+  background: var(--maroon-dark);
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+.tab {
+  flex: 1; padding: 11px 0;
+  font-size: 12px; font-weight: 600;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: rgba(255,255,255,0.45);
+  border: none; background: none;
+  cursor: pointer; transition: all 0.2s;
+}
+.tab.active {
+  color: #fff;
+  border-bottom: 2px solid #fff;
+  background: rgba(255,255,255,0.05);
+}
+
+/* ── PANELS ── */
+.panel { display: none; padding: 20px; }
+.panel.active { display: block; }
+
+/* ── SCANNER PANEL ── */
+.scanner-wrap {
+  background: #000;
+  border-radius: 16px;
+  overflow: hidden;
+  position: relative;
+  aspect-ratio: 1;
+  max-width: 420px;
+  margin: 0 auto;
+}
+#video { width: 100%; height: 100%; object-fit: cover; display: block; }
+#canvas { display: none; }
+
+.scan-overlay {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+}
+.scan-frame {
+  width: 60%; aspect-ratio: 1;
+  position: relative;
+}
+.scan-frame::before, .scan-frame::after,
+.scan-frame span::before, .scan-frame span::after {
+  content: '';
+  position: absolute;
+  width: 24px; height: 24px;
+  border-color: #fff;
+  border-style: solid;
+}
+.scan-frame::before  { top:0; left:0;  border-width: 3px 0 0 3px; border-radius: 4px 0 0 0; }
+.scan-frame::after   { top:0; right:0; border-width: 3px 3px 0 0; border-radius: 0 4px 0 0; }
+.scan-frame span::before { bottom:0; left:0;  border-width: 0 0 3px 3px; border-radius: 0 0 0 4px; }
+.scan-frame span::after  { bottom:0; right:0; border-width: 0 3px 3px 0; border-radius: 0 0 4px 0; }
+
+.scan-line {
+  position: absolute; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(255,80,80,0.8), transparent);
+  animation: scanline 2s ease-in-out infinite;
+  top: 0;
+}
+@keyframes scanline {
+  0% { top: 0; }  50% { top: 100%; }  100% { top: 0; }
+}
+
+.scan-hint {
+  text-align: center; margin-top: 12px;
+  font-size: 12px; color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+/* ── RESULT CARD ── */
+.result-card {
+  border-radius: 14px;
+  padding: 18px 20px;
+  margin-top: 16px;
+  display: none;
+  animation: fadeUp 0.3s ease;
+  max-width: 420px;
+  margin-left: auto; margin-right: auto;
+}
+.result-card.show { display: block; }
+.result-card.valid   { background: var(--green-bg);  border: 1.5px solid #86efac; }
+.result-card.invalid { background: var(--red-bg);    border: 1.5px solid #fca5a5; }
+.result-card.warn    { background: var(--amber-bg);  border: 1.5px solid #fcd34d; }
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.result-icon {
+  font-size: 36px; text-align: center; margin-bottom: 8px;
+  line-height: 1;
+}
+.result-title {
+  font-size: 17px; font-weight: 700; text-align: center; margin-bottom: 4px;
+}
+.result-card.valid   .result-title { color: var(--green); }
+.result-card.invalid .result-title { color: var(--red); }
+.result-card.warn    .result-title { color: var(--amber); }
+
+.result-detail {
+  font-size: 13px; text-align: center; color: var(--muted);
+  line-height: 1.5;
+}
+.result-token {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.14em;
+  text-align: center; margin-top: 8px;
+  color: #555;
+}
+
+/* ── START BUTTON ── */
+.btn {
+  width: 100%; max-width: 420px;
+  display: block; margin: 0 auto;
+  padding: 14px 20px;
+  background: var(--maroon);
+  color: #fff;
+  border: none; border-radius: 12px;
+  font-size: 14px; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  cursor: pointer; transition: background 0.2s;
+  margin-bottom: 16px;
+}
+.btn:hover { background: var(--maroon-light); }
+.btn.secondary {
+  background: transparent;
+  border: 1.5px solid var(--maroon);
+  color: var(--maroon);
+}
+.btn.red { background: var(--red); }
+
+/* ── STATS BAR ── */
+.stats-bar {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 10px; margin-bottom: 16px;
+  max-width: 420px; margin-left: auto; margin-right: auto;
+}
+.stat-box {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 8px;
+  text-align: center;
+}
+.stat-num {
+  font-size: 22px; font-weight: 800;
+  line-height: 1; margin-bottom: 3px;
+}
+.stat-box:nth-child(1) .stat-num { color: var(--maroon); }
+.stat-box:nth-child(2) .stat-num { color: var(--green); }
+.stat-box:nth-child(3) .stat-num { color: var(--red); }
+.stat-lbl { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
+
+/* ── LOG ── */
+.log-wrap {
+  max-width: 420px; margin: 0 auto;
+}
+.log-title {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--muted);
+  margin-bottom: 8px;
+}
+.log { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.log-item {
+  background: var(--card);
+  border-radius: 10px;
+  padding: 10px 14px;
+  display: flex; align-items: center; gap: 12px;
+  border-left: 3px solid;
+  font-size: 13px;
+}
+.log-item.ok  { border-color: var(--green); }
+.log-item.dup { border-color: var(--red); }
+.log-item.inv { border-color: var(--amber); }
+.log-token { font-weight: 700; flex: 1; }
+.log-time  { font-size: 10px; color: var(--muted); }
+.log-badge {
+  font-size: 9px; font-weight: 700; letter-spacing: 0.1em;
+  padding: 2px 7px; border-radius: 20px; text-transform: uppercase;
+}
+.ok  .log-badge { background: var(--green-bg); color: var(--green); }
+.dup .log-badge { background: var(--red-bg);   color: var(--red); }
+.inv .log-badge { background: var(--amber-bg); color: var(--amber); }
+.log-empty { text-align: center; color: var(--muted); font-size: 13px; padding: 20px 0; }
+
+/* ── GENERATOR PANEL ── */
+.gen-section {
+  max-width: 480px; margin: 0 auto;
+}
+.gen-section h2 {
+  font-size: 15px; font-weight: 700; margin-bottom: 4px;
+}
+.gen-section p {
+  font-size: 12px; color: var(--muted); margin-bottom: 16px; line-height: 1.5;
+}
+.input-row {
+  display: flex; gap: 10px; margin-bottom: 12px;
+}
+.input-row input, .input-row select {
+  flex: 1; padding: 11px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  font-size: 14px; color: var(--text);
+  background: var(--card);
+  outline: none;
+}
+.input-row input:focus, .input-row select:focus {
+  border-color: var(--maroon);
+}
+.token-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 14px; margin-top: 16px;
+}
+.token-card-gen {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  text-align: center;
+  cursor: pointer;
+  transition: box-shadow 0.2s;
+}
+.token-card-gen:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.1); }
+.token-card-gen .qr-div { margin: 0 auto 8px; }
+.token-card-gen .qr-div canvas, .token-card-gen .qr-div img { width: 100% !important; height: auto !important; }
+.tc-id   { font-size: 13px; font-weight: 700; color: var(--maroon); letter-spacing: 0.06em; }
+.tc-name { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.tc-status {
+  margin-top: 6px; font-size: 9px; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 20px; display: inline-block;
+}
+.tc-status.valid   { background: var(--green-bg); color: var(--green); }
+.tc-status.used    { background: var(--red-bg);   color: var(--red); }
+
+/* ── SETTINGS PANEL ── */
+.settings-section {
+  max-width: 420px; margin: 0 auto;
+}
+.settings-row {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px; margin-bottom: 10px;
+}
+.settings-row h3 { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+.settings-row p  { font-size: 12px; color: var(--muted); margin-bottom: 12px; line-height: 1.5; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <div class="topbar-title">Biothon Fest 2025</div>
+    <div class="topbar-sub">Entry Token Scanner</div>
+  </div>
+  <div class="status-dot" id="liveDot"></div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('scanner')">📷 Scanner</button>
+  <button class="tab" onclick="switchTab('generator')">🎫 Generate</button>
+  <button class="tab" onclick="switchTab('settings')">⚙️ Manage</button>
+</div>
+
+<!-- ═══════════════════ SCANNER PANEL ═══════════════════ -->
+<div class="panel active" id="panel-scanner">
+
+  <div class="stats-bar">
+    <div class="stat-box">
+      <div class="stat-num" id="stat-total">0</div>
+      <div class="stat-lbl">Scanned</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-num" id="stat-valid">0</div>
+      <div class="stat-lbl">Valid</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-num" id="stat-dup">0</div>
+      <div class="stat-lbl">Rejected</div>
+    </div>
+  </div>
+
+  <button class="btn" id="startBtn" onclick="startCamera()">▶ Start Camera</button>
+
+  <div class="scanner-wrap" id="scannerBox" style="display:none;">
+    <video id="video" autoplay muted playsinline></video>
+    <canvas id="canvas"></canvas>
+    <div class="scan-overlay">
+      <div class="scan-frame"><span></span><div class="scan-line"></div></div>
+    </div>
+  </div>
+  <p class="scan-hint" id="scanHint" style="display:none;">Point camera at token QR code</p>
+
+  <div class="result-card" id="resultCard">
+    <div class="result-icon" id="resIcon"></div>
+    <div class="result-title" id="resTitle"></div>
+    <div class="result-detail" id="resDetail"></div>
+    <div class="result-token" id="resToken"></div>
+  </div>
+
+  <div class="log-wrap" style="margin-top:20px;">
+    <div class="log-title">Recent Scans</div>
+    <div class="log" id="logList">
+      <div class="log-empty">No scans yet</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ GENERATOR PANEL ═══════════════════ -->
+<div class="panel" id="panel-generator">
+  <div class="gen-section">
+    <h2>Generate Entry Tokens</h2>
+    <p>Each token gets a unique QR code. Generated tokens are stored for one-time scan validation. Print or screenshot them for attendees.</p>
+
+    <div class="input-row">
+      <input type="text" id="eventCode" placeholder="Event code (e.g. BF25)" value="BF25" maxlength="6">
+      <input type="number" id="tokenCount" placeholder="Count" value="10" min="1" max="200">
+    </div>
+    <div class="input-row">
+      <select id="tokenCategory">
+        <option value="General">General Entry</option>
+        <option value="VIP">VIP Entry</option>
+        <option value="Speaker">Speaker</option>
+        <option value="Organizer">Organizer</option>
+        <option value="Press">Press</option>
+      </select>
+    </div>
+    <button class="btn" onclick="generateTokens()">⚡ Generate Tokens</button>
+
+    <div class="token-grid" id="tokenGrid"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════ SETTINGS PANEL ═══════════════════ -->
+<div class="panel" id="panel-settings">
+  <div class="settings-section">
+
+    <div class="settings-row">
+      <h3>📊 Token Database</h3>
+      <p>All registered and scanned tokens stored in this browser. Tokens persist until cleared.</p>
+      <button class="btn secondary" onclick="exportLog()">⬇ Export Scan Log (CSV)</button>
+    </div>
+
+    <div class="settings-row">
+      <h3>🔄 Reset Scan History</h3>
+      <p>Marks all tokens as unscanned. Tokens remain valid but can be re-entered. Use for testing only.</p>
+      <button class="btn secondary" onclick="resetScans()">Reset All Scans</button>
+    </div>
+
+    <div class="settings-row">
+      <h3>🗑 Clear All Tokens</h3>
+      <p>Permanently removes all generated tokens and scan history. This cannot be undone.</p>
+      <button class="btn red" onclick="clearAll()">Clear Everything</button>
+    </div>
+
+    <div class="settings-row" id="dbStats">
+      <h3>📋 Current Status</h3>
+      <div id="dbStatsContent" style="font-size:13px; line-height:2; color: var(--muted);"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════
+const STORAGE_TOKENS  = 'biothon_tokens_2025';
+const STORAGE_SCANNED = 'biothon_scanned_2025';
+const STORAGE_LOG     = 'biothon_log_2025';
+
+function getTokens()  { try { return JSON.parse(localStorage.getItem(STORAGE_TOKENS)  || '{}'); } catch(e) { return {}; } }
+function getScanned() { try { return JSON.parse(localStorage.getItem(STORAGE_SCANNED) || '{}'); } catch(e) { return {}; } }
+function getLog()     { try { return JSON.parse(localStorage.getItem(STORAGE_LOG)     || '[]'); } catch(e) { return []; } }
+
+function saveTokens(d)  { localStorage.setItem(STORAGE_TOKENS, JSON.stringify(d)); }
+function saveScanned(d) { localStorage.setItem(STORAGE_SCANNED, JSON.stringify(d)); }
+function saveLog(d)     { localStorage.setItem(STORAGE_LOG, JSON.stringify(d)); }
+
+let scanStats = { total: 0, valid: 0, dup: 0 };
+let scanning = false;
+let stream = null;
+let lastScan = '';
+let lastScanTime = 0;
+const COOLDOWN = 2500; // ms between same QR re-reads
+
+// ══════════════════════════════════════════
+//  TAB SWITCHING
+// ══════════════════════════════════════════
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    const names = ['scanner','generator','settings'];
+    t.classList.toggle('active', names[i] === name);
+  });
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  if (name === 'settings') refreshStats();
+  if (name === 'generator') renderTokenGrid();
+}
+
+// ══════════════════════════════════════════
+//  CAMERA / SCANNING
+// ══════════════════════════════════════════
+async function startCamera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    const video = document.getElementById('video');
+    video.srcObject = stream;
+    document.getElementById('scannerBox').style.display = 'block';
+    document.getElementById('scanHint').style.display = 'block';
+    document.getElementById('startBtn').textContent = '⏹ Stop Camera';
+    document.getElementById('startBtn').onclick = stopCamera;
+    scanning = true;
+    requestAnimationFrame(tick);
+  } catch(e) {
+    alert('Camera access denied. Please allow camera permission and try again.\n\nError: ' + e.message);
+  }
+}
+
+function stopCamera() {
+  scanning = false;
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  document.getElementById('scannerBox').style.display = 'none';
+  document.getElementById('scanHint').style.display = 'none';
+  document.getElementById('startBtn').textContent = '▶ Start Camera';
+  document.getElementById('startBtn').onclick = startCamera;
+}
+
+function tick() {
+  if (!scanning) return;
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('canvas');
+  if (video.readyState === video.HAVE_ENOUGH_DATA) {
+    canvas.height = video.videoHeight;
+    canvas.width  = video.videoWidth;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
+    if (code) {
+      const now = Date.now();
+      if (code.data !== lastScan || now - lastScanTime > COOLDOWN) {
+        lastScan = code.data;
+        lastScanTime = now;
+        processQR(code.data);
+      }
+    }
+  }
+  requestAnimationFrame(tick);
+}
+
+// ══════════════════════════════════════════
+//  QR PROCESSING — CORE LOGIC
+// ══════════════════════════════════════════
+function processQR(rawData) {
+  let parsed;
+  try { parsed = JSON.parse(rawData); } catch(e) {
+    showResult('invalid', '⚠️', 'Invalid Token', 'This QR code is not a valid Biothon Fest token.', rawData.substring(0, 20));
+    logEntry(rawData, 'inv', 'Invalid QR');
+    return;
+  }
+
+  const tokens = getTokens();
+  const scanned = getScanned();
+
+  // Token not in registered database
+  if (!tokens[parsed.id]) {
+    showResult('warn', '⛔', 'Unregistered Token', 'This token ID is not in the event database.', parsed.id || '?');
+    logEntry(parsed.id || rawData, 'inv', 'Not Registered');
+    return;
+  }
+
+  // Token already used
+  if (scanned[parsed.id]) {
+    const usedAt = new Date(scanned[parsed.id].time).toLocaleTimeString();
+    showResult('invalid', '🚫', 'Already Used!', `This token was already scanned at ${usedAt}. Entry denied.`, parsed.id);
+    logEntry(parsed.id, 'dup', 'Duplicate');
+    scanStats.dup++;
+  } else {
+    // VALID — mark as used
+    const entry = { time: new Date().toISOString(), category: tokens[parsed.id].category };
+    scanned[parsed.id] = entry;
+    saveScanned(scanned);
+    showResult('valid', '✅', 'Welcome!', `Valid ${tokens[parsed.id].category} token. Entry granted.`, parsed.id);
+    logEntry(parsed.id, 'ok', tokens[parsed.id].category);
+    scanStats.valid++;
+  }
+
+  scanStats.total++;
+  updateStats();
+}
+
+// ══════════════════════════════════════════
+//  RESULT DISPLAY
+// ══════════════════════════════════════════
+function showResult(type, icon, title, detail, tokenId) {
+  const card = document.getElementById('resultCard');
+  card.className = 'result-card show ' + (type === 'valid' ? 'valid' : type === 'invalid' ? 'invalid' : 'warn');
+  document.getElementById('resIcon').textContent    = icon;
+  document.getElementById('resTitle').textContent   = title;
+  document.getElementById('resDetail').textContent  = detail;
+  document.getElementById('resToken').textContent   = '# ' + tokenId;
+  // Flash bg
+  document.body.style.transition = 'background 0.15s';
+  document.body.style.background = type === 'valid' ? '#bbf7d0' : type === 'invalid' ? '#fecaca' : '#fde68a';
+  setTimeout(() => { document.body.style.background = '#f7f4f0'; }, 600);
+  // Auto-hide after 4s
+  setTimeout(() => { card.classList.remove('show'); }, 4000);
+}
+
+// ══════════════════════════════════════════
+//  STATS
+// ══════════════════════════════════════════
+function updateStats() {
+  document.getElementById('stat-total').textContent = scanStats.total;
+  document.getElementById('stat-valid').textContent = scanStats.valid;
+  document.getElementById('stat-dup').textContent   = scanStats.dup;
+}
+
+// ══════════════════════════════════════════
+//  LOG
+// ══════════════════════════════════════════
+function logEntry(tokenId, type, label) {
+  const log = getLog();
+  const entry = { id: tokenId, type, label, time: new Date().toISOString() };
+  log.unshift(entry);
+  if (log.length > 100) log.pop();
+  saveLog(log);
+  renderLog();
+}
+
+function renderLog() {
+  const log = getLog();
+  const el = document.getElementById('logList');
+  if (!log.length) { el.innerHTML = '<div class="log-empty">No scans yet</div>'; return; }
+  el.innerHTML = log.slice(0,20).map(e => `
+    <div class="log-item ${e.type}">
+      <span class="log-token">${e.id}</span>
+      <span class="log-badge">${e.label}</span>
+      <span class="log-time">${new Date(e.time).toLocaleTimeString()}</span>
+    </div>`).join('');
+}
+
+// ══════════════════════════════════════════
+//  TOKEN GENERATOR
+// ══════════════════════════════════════════
+function generateTokens() {
+  const code     = document.getElementById('eventCode').value.trim().toUpperCase() || 'BF25';
+  const count    = Math.min(200, Math.max(1, parseInt(document.getElementById('tokenCount').value) || 10));
+  const category = document.getElementById('tokenCategory').value;
+
+  const tokens = getTokens();
+  // Find current max number for this code+category
+  let existing = Object.keys(tokens).filter(k => k.startsWith(code)).length;
+
+  for (let i = 1; i <= count; i++) {
+    const num = String(existing + i).padStart(4, '0');
+    const id  = `${code}-${num}`;
+    if (!tokens[id]) {
+      tokens[id] = { category, created: new Date().toISOString() };
+    }
+  }
+  saveTokens(tokens);
+  renderTokenGrid();
+}
+
+function renderTokenGrid() {
+  const tokens  = getTokens();
+  const scanned = getScanned();
+  const grid = document.getElementById('tokenGrid');
+
+  const keys = Object.keys(tokens);
+  if (!keys.length) {
+    grid.innerHTML = '<p style="color:var(--muted);font-size:13px;">No tokens generated yet.</p>';
+    return;
+  }
+
+  grid.innerHTML = keys.slice(-40).reverse().map(id => {
+    const used = !!scanned[id];
+    return `<div class="token-card-gen" title="Click to view QR">
+      <div class="qr-div" id="qr-${id}"></div>
+      <div class="tc-id">${id}</div>
+      <div class="tc-name">${tokens[id].category}</div>
+      <div class="tc-status ${used ? 'used' : 'valid'}">${used ? 'Used' : 'Valid'}</div>
+    </div>`;
+  }).join('');
+
+  // Render QR codes after DOM is ready
+  setTimeout(() => {
+    keys.slice(-40).reverse().forEach(id => {
+      const el = document.getElementById('qr-' + id);
+      if (el && !el.hasChildNodes()) {
+        try {
+          new QRCode(el, {
+            text: JSON.stringify({ id, event: 'BF2025', cat: tokens[id].category }),
+            width: 128, height: 128,
+            colorDark: '#1a1a1a', colorLight: '#ffffff',
+            correctLevel: QRCode.CorrectLevel.M
+          });
+        } catch(e) {}
+      }
+    });
+  }, 100);
+}
+
+// ══════════════════════════════════════════
+//  SETTINGS ACTIONS
+// ══════════════════════════════════════════
+function resetScans() {
+  if (!confirm('Reset all scan history? Tokens will be valid again.')) return;
+  localStorage.removeItem(STORAGE_SCANNED);
+  localStorage.removeItem(STORAGE_LOG);
+  scanStats = { total:0, valid:0, dup:0 };
+  updateStats();
+  renderLog();
+  refreshStats();
+  alert('Scan history cleared.');
+}
+
+function clearAll() {
+  if (!confirm('Delete ALL tokens and scan history? This cannot be undone.')) return;
+  localStorage.removeItem(STORAGE_TOKENS);
+  localStorage.removeItem(STORAGE_SCANNED);
+  localStorage.removeItem(STORAGE_LOG);
+  scanStats = { total:0, valid:0, dup:0 };
+  updateStats();
+  renderLog();
+  renderTokenGrid();
+  refreshStats();
+  alert('All data cleared.');
+}
+
+function exportLog() {
+  const log = getLog();
+  const tokens = getTokens();
+  if (!log.length) { alert('No scan log to export.'); return; }
+  const csv = ['Token ID,Category,Status,Time', ...log.map(e =>
+    `${e.id},${(tokens[e.id] || {}).category || 'Unknown'},${e.label},${e.time}`)].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'biothon_scan_log.csv';
+  a.click();
+}
+
+function refreshStats() {
+  const tokens  = getTokens();
+  const scanned = getScanned();
+  const log     = getLog();
+  const total   = Object.keys(tokens).length;
+  const used    = Object.keys(scanned).length;
+  document.getElementById('dbStatsContent').innerHTML = `
+    Total registered tokens: <strong>${total}</strong><br>
+    Tokens scanned (used): <strong>${used}</strong><br>
+    Tokens remaining: <strong>${total - used}</strong><br>
+    Total scan log entries: <strong>${log.length}</strong>`;
+}
+
+// ══════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════
+renderLog();
+updateStats();
+
+// Reload scanned stats from stored log on page load
+const storedLog = getLog();
+scanStats.total = storedLog.length;
+scanStats.valid = storedLog.filter(e => e.type === 'ok').length;
+scanStats.dup   = storedLog.filter(e => e.type === 'dup').length;
+updateStats();
+</script>
+</body>
+</html>
